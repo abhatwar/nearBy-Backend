@@ -46,6 +46,9 @@ app.use('/api/payment', require('../routes/payment'));
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'OK', timestamp: new Date().toISOString() }));
 
+// Root
+app.get('/', (_req, res) => res.json({ success: true, message: 'NearBy Finder API is running' }));
+
 // 404 handler
 app.use((_req, res) => {
   res.status(404).json({ success: false, message: 'Route not found' });
