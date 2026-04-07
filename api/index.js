@@ -1,0 +1,79 @@
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const connectDB = require('../config/db');
+
+const app = express();
+
+// Connect to MongoDB
+connectDB();
+
+// Security: HTTP headers
+app.use(helmet());
+
+// CORS
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || 'http://localhost:5173',
+    credentials: true,
+  })
+);
+
+// Rate limiting – 100 requests per 15 min per IP
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Too many requests, please try again later.' },
+});
+app.use('/api/', limiter);
+
+// Body parsers
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Routes
+app.use('/api/auth', require('../routes/auth'));
+app.use('/api/businesses', require('../routes/business'));
+app.use('/api/reviews', require('../routes/review'));
+app.use('/api/admin', require('../routes/admin'));
+app.use('/api/enterprise', require('../routes/enterprise'));
+app.use('/api/payment', require('../routes/payment'));
+
+// Health check
+app.get('/health', (_req, res) => res.json({ status: 'OK', timestamp: new Date().toISOString() }));
+
+// 404 handler
+app.use((_req, res) => {
+  res.status(404).json({ success: false, message: 'Route not found' });
+});
+
+// Global error handler
+app.use((err, _req, res, _next) => {
+  if (err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ success: false, message: 'File too large. Maximum size is 10 MB per image.' });
+  }
+  if (err.code === 'LIMIT_FILE_COUNT') {
+    return res.status(400).json({ success: false, message: 'Too many files. Maximum is 5 images.' });
+  }
+  if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+    return res.status(400).json({ success: false, message: 'Unexpected upload field.' });
+  }
+  if (err.message === 'Only image files are allowed') {
+    return res.status(400).json({ success: false, message: err.message });
+  }
+  console.error(err.stack);
+  const status = err.statusCode || 500;
+  res.status(status).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+  });
+});
+
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+module.exports = app;
