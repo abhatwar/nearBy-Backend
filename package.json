@@ -5,7 +5,8 @@
   "main": "api/index.js",
   "scripts": {
     "start": "node api/index.js",
-    "dev": "nodemon api/index.js"
+    "dev": "nodemon api/index.js",
+    "backfill:cities": "node scripts/backfillCities.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

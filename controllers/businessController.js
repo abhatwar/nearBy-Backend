@@ -4,6 +4,17 @@ const cloudinary = require('../config/cloudinary');
 const upload = require('../middleware/upload');
 
 const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const buildCityMatch = (city) => {
+  const normalized = city?.trim();
+  if (!normalized) return null;
+  const containsRegex = { $regex: escapeRegex(normalized), $options: 'i' };
+  return {
+    $or: [
+      { 'location.city': containsRegex },
+      { 'location.address': containsRegex },
+    ],
+  };
+};
 
 // @desc    Get all active businesses, optionally filtered (PUBLIC)
 // @route   GET /api/businesses
@@ -15,13 +26,7 @@ exports.getAllBusinesses = async (req, res) => {
     if (category) query.category = category;
     if (minRating) query.avgRating = { $gte: parseFloat(minRating) };
     if (search) query.name = { $regex: search, $options: 'i' };
-    if (city) {
-      const cityRegex = { $regex: `^${escapeRegex(city.trim())}$`, $options: 'i' };
-      query.$or = [
-        { 'location.city': cityRegex },
-        { 'location.address': { $regex: escapeRegex(city.trim()), $options: 'i' } },
-      ];
-    }
+    if (city) Object.assign(query, buildCityMatch(city));
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const businesses = await Business.find(query)
@@ -73,13 +78,7 @@ exports.getNearbyBusinesses = async (req, res) => {
     if (category) matchStage.category = category;
     if (minRating) matchStage.avgRating = { $gte: parseFloat(minRating) };
     if (search) matchStage.name = { $regex: search, $options: 'i' };
-    if (city) {
-      const cityRegex = { $regex: `^${escapeRegex(city.trim())}$`, $options: 'i' };
-      matchStage.$or = [
-        { 'location.city': cityRegex },
-        { 'location.address': { $regex: escapeRegex(city.trim()), $options: 'i' } },
-      ];
-    }
+    if (city) Object.assign(matchStage, buildCityMatch(city));
 
     const projectStage = {
       $project: {
@@ -124,6 +123,30 @@ exports.getNearbyBusinesses = async (req, res) => {
     }
 
     res.json({ success: true, count: businesses.length, businesses, outsideRadius, radius: maxDistance });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// @desc    Get city-wise active business counts
+// @route   GET /api/businesses/cities
+// @access  Public
+exports.getCityWiseCounts = async (_req, res) => {
+  try {
+    const cities = await Business.aggregate([
+      { $match: { status: 'approved', isActive: true, 'location.city': { $exists: true, $ne: '' } } },
+      {
+        $group: {
+          _id: { $toLower: '$location.city' },
+          count: { $sum: 1 },
+          city: { $first: '$location.city' },
+        },
+      },
+      { $sort: { count: -1, city: 1 } },
+      { $project: { _id: 0, city: 1, count: 1 } },
+    ]);
+
+    res.json({ success: true, cities });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

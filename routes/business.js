@@ -3,6 +3,7 @@ const { body } = require('express-validator');
 const {
   getAllBusinesses,
   getNearbyBusinesses,
+  getCityWiseCounts,
   getBusinessById,
   createBusiness,
   updateBusiness,
@@ -24,6 +25,7 @@ const businessCreateRules = [
 // Public routes
 router.get('/', getAllBusinesses);
 router.get('/nearby', getNearbyBusinesses);
+router.get('/cities', getCityWiseCounts);
 router.get('/:id', getBusinessById);
 router.post('/:id/click', trackClick);
 router.post('/:id/lead', trackLead);
