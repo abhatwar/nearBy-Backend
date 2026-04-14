@@ -44,6 +44,16 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// Ensure MongoDB is connected before handling API routes.
+app.use(async (_req, res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Database connection failed' });
+  }
+});
+
 // Routes
 app.use('/api/auth', require('../routes/auth'));
 app.use('/api/businesses', require('../routes/business'));
@@ -97,6 +107,12 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (process.env.VERCEL) {
+  connectDB().catch((err) => {
+    console.error(`MongoDB bootstrap error: ${err.message}`);
+  });
+} else {
+  startServer();
+}
 
 module.exports = app;
