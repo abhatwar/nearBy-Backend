@@ -47,6 +47,7 @@ const businessSchema = new mongoose.Schema(
           message: 'Coordinates must be [longitude, latitude]',
         },
       },
+      city: { type: String, trim: true },
       address: { type: String, trim: true },
     },
     contactInfo: {
@@ -82,5 +83,6 @@ const businessSchema = new mongoose.Schema(
 // 2dsphere index for geospatial queries
 businessSchema.index({ location: '2dsphere' });
 businessSchema.index({ category: 1, status: 1, isActive: 1 });
+businessSchema.index({ 'location.city': 1, status: 1, isActive: 1 });
 
 module.exports = mongoose.model('Business', businessSchema);

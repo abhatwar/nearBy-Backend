@@ -3,16 +3,25 @@ const Business = require('../models/Business');
 const cloudinary = require('../config/cloudinary');
 const upload = require('../middleware/upload');
 
+const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // @desc    Get all active businesses, optionally filtered (PUBLIC)
 // @route   GET /api/businesses
 // @access  Public
 exports.getAllBusinesses = async (req, res) => {
   try {
-    const { category, minRating, search, page = 1, limit = 20 } = req.query;
+    const { category, minRating, search, city, page = 1, limit = 20 } = req.query;
     const query = { status: 'approved', isActive: true };
     if (category) query.category = category;
     if (minRating) query.avgRating = { $gte: parseFloat(minRating) };
     if (search) query.name = { $regex: search, $options: 'i' };
+    if (city) {
+      const cityRegex = { $regex: `^${escapeRegex(city.trim())}$`, $options: 'i' };
+      query.$or = [
+        { 'location.city': cityRegex },
+        { 'location.address': { $regex: escapeRegex(city.trim()), $options: 'i' } },
+      ];
+    }
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
     const businesses = await Business.find(query)
@@ -32,7 +41,18 @@ exports.getAllBusinesses = async (req, res) => {
 // @access  Public
 exports.getNearbyBusinesses = async (req, res) => {
   try {
-    const { lat, lng, radius = 5000, category, minRating, search, page = 1, limit = 20 } = req.query;
+    const {
+      lat,
+      lng,
+      radius = 5000,
+      category,
+      minRating,
+      search,
+      city,
+      page = 1,
+      limit = 20,
+      fallback = 'false',
+    } = req.query;
 
     if (!lat || !lng) {
       return res.status(400).json({ success: false, message: 'lat and lng are required' });
@@ -46,10 +66,20 @@ exports.getNearbyBusinesses = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid coordinates' });
     }
 
+    const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
+    const allowFallback = String(fallback).toLowerCase() === 'true';
+
     const matchStage = { status: 'approved', isActive: true };
     if (category) matchStage.category = category;
     if (minRating) matchStage.avgRating = { $gte: parseFloat(minRating) };
     if (search) matchStage.name = { $regex: search, $options: 'i' };
+    if (city) {
+      const cityRegex = { $regex: `^${escapeRegex(city.trim())}$`, $options: 'i' };
+      matchStage.$or = [
+        { 'location.city': cityRegex },
+        { 'location.address': { $regex: escapeRegex(city.trim()), $options: 'i' } },
+      ];
+    }
 
     const projectStage = {
       $project: {
@@ -75,9 +105,9 @@ exports.getNearbyBusinesses = async (req, res) => {
       projectStage,
     ]);
 
-    // If nothing found within radius, return nearest results without maxDistance
+    // Optional: if nothing found within radius, return nearest results without maxDistance
     let outsideRadius = false;
-    if (businesses.length === 0) {
+    if (allowFallback && businesses.length === 0) {
       businesses = await Business.aggregate([
         {
           $geoNear: {
@@ -134,7 +164,7 @@ exports.createBusiness = async (req, res) => {
   }
 
   try {
-    const { name, category, description, lat, lng, address, phone, email, website } = req.body;
+    const { name, category, description, lat, lng, city, address, phone, email, website } = req.body;
 
     // Handle uploaded images
     const images = upload.normaliseFiles(req);
@@ -147,6 +177,7 @@ exports.createBusiness = async (req, res) => {
       location: {
         type: 'Point',
         coordinates: [parseFloat(lng), parseFloat(lat)],
+        city,
         address,
       },
       contactInfo: { phone, email, website },
@@ -176,7 +207,7 @@ exports.updateBusiness = async (req, res) => {
       return res.status(403).json({ success: false, message: 'Not authorized' });
     }
 
-    const { name, category, description, lat, lng, address, phone, email, website } = req.body;
+    const { name, category, description, lat, lng, city, address, phone, email, website } = req.body;
 
     if (name) business.name = name;
     if (category) business.category = category;
@@ -184,6 +215,7 @@ exports.updateBusiness = async (req, res) => {
     if (lat && lng) {
       business.location.coordinates = [parseFloat(lng), parseFloat(lat)];
     }
+    if (city) business.location.city = city;
     if (address) business.location.address = address;
     if (phone) business.contactInfo.phone = phone;
     if (email) business.contactInfo.email = email;
