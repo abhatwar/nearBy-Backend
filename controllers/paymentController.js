@@ -3,6 +3,8 @@ const Razorpay = require('razorpay');
 const Payment = require('../models/Payment');
 const Business = require('../models/Business');
 
+const isPaymentBypassed = () => String(process.env.BYPASS_PAYMENT || 'false').toLowerCase() === 'true';
+
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET,
@@ -21,6 +23,33 @@ exports.createOrder = async (req, res) => {
     }
     if (business.isActive) {
       return res.status(400).json({ success: false, message: 'Business subscription already active' });
+    }
+    if (business.status !== 'approved') {
+      return res.status(400).json({ success: false, message: 'Business must be approved by admin before payment' });
+    }
+
+    if (isPaymentBypassed()) {
+      const amount = parseInt(process.env.SUBSCRIPTION_AMOUNT || '1100', 10);
+      const pseudoOrderId = `bypass_order_${Date.now()}`;
+      const pseudoPaymentId = `bypass_payment_${Date.now()}`;
+
+      await Payment.create({
+        user: req.user._id,
+        business: businessId,
+        razorpayOrderId: pseudoOrderId,
+        razorpayPaymentId: pseudoPaymentId,
+        razorpaySignature: 'bypass',
+        amount,
+        status: 'paid',
+      });
+
+      await Business.findByIdAndUpdate(businessId, { isActive: true });
+
+      return res.json({
+        success: true,
+        bypass: true,
+        message: 'Payment bypass is enabled. Business activated without Razorpay.',
+      });
     }
 
     const amount = parseInt(process.env.SUBSCRIPTION_AMOUNT || '1100', 10); // ₹11 = 1100 paise
@@ -80,6 +109,11 @@ exports.dummyActivate = async (req, res) => {
 exports.verifyPayment = async (req, res) => {
   try {
     const { razorpayOrderId, razorpayPaymentId, razorpaySignature, businessId } = req.body;
+
+    if (isPaymentBypassed()) {
+      await Business.findByIdAndUpdate(businessId, { isActive: true });
+      return res.json({ success: true, bypass: true, message: 'Payment bypass is enabled. Business is now active!' });
+    }
 
     // Verify signature
     const expectedSignature = crypto

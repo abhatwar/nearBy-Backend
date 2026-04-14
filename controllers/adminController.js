@@ -156,15 +156,19 @@ exports.getAllBusinesses = async (req, res) => {
 // @access  Private (admin)
 exports.reviewBusiness = async (req, res) => {
   try {
-    const { action, rejectionReason } = req.body; // action: 'approve' | 'reject'
+    const { action, rejectionReason, paymentRequired } = req.body; // action: 'approve' | 'reject'
     if (!['approve', 'reject'].includes(action)) {
       return res.status(400).json({ success: false, message: 'action must be approve or reject' });
     }
 
+    const shouldRequirePayment = action === 'approve' ? Boolean(paymentRequired) : false;
+
     const update = {
       status: action === 'approve' ? 'approved' : 'rejected',
+      ...(action === 'approve' && { isActive: !shouldRequirePayment }),
       ...(action === 'reject' && { isActive: false }),
     };
+    if (action === 'approve') update.rejectionReason = '';
     if (action === 'reject' && rejectionReason) update.rejectionReason = rejectionReason;
 
     const business = await Business.findByIdAndUpdate(req.params.id, update, { new: true });
