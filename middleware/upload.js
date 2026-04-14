@@ -35,7 +35,7 @@ if (cloudinaryConfigured) {
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024, files: 5 }, // 10 MB per file, max 5 files
+  limits: { fileSize: 2 * 1024 * 1024, files: 5 }, // 2 MB per file, max 5 files
 });
 
 // Export a wrapper that normalises file paths whether using Cloudinary or memory

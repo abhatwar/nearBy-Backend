@@ -10,22 +10,30 @@ const app = express();
 // Security: HTTP headers
 app.use(helmet());
 
+const normalizeOrigin = (value) => (value || '').trim().replace(/\/$/, '');
 
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://near-by-frontend.vercel.app'
-];
+  'https://near-by-frontend.vercel.app',
+  'https://www.near-by-frontend.vercel.app',
+  process.env.CLIENT_URL,
+  process.env.FRONTEND_URL,
+]
+  .map(normalizeOrigin)
+  .filter(Boolean);
 
 // CORS
 app.use(
   cors({
     origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
+      const normalizedOrigin = normalizeOrigin(origin);
+      if (!origin || allowedOrigins.includes(normalizedOrigin)) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
       }
     },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     credentials: true
   })
 );
@@ -76,7 +84,7 @@ app.use((_req, res) => {
 // Global error handler
 app.use((err, _req, res, _next) => {
   if (err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ success: false, message: 'File too large. Maximum size is 10 MB per image.' });
+    return res.status(400).json({ success: false, message: 'File too large. Maximum size is 2 MB per image.' });
   }
   if (err.code === 'LIMIT_FILE_COUNT') {
     return res.status(400).json({ success: false, message: 'Too many files. Maximum is 5 images.' });
