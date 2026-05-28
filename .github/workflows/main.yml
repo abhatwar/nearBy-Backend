@@ -1,0 +1,43 @@
+name: Docker Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build Docker Image
+        run: docker build -t abhatwar/nearby-backend:latest .
+
+      - name: Push Docker Image
+        run: docker push abhatwar/nearby-backend:latest
+
+      - name: Deploy to EC2
+        uses: ssh ubuntu@172.31.14.237
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            docker stop nearby-backend || true
+            docker rm nearby-backend || true
+            
+            docker pull abhatwar/nearby-backend:latest
+            
+            docker run -d \
+              -p 8000:8000 \
+              --name nearby-backend \
+              abhatwar/nearby-backend:latest
